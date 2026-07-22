@@ -1,0 +1,55 @@
+// Prisma schema for the weekly medical-visit planner.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Doctor {
+  id            Int      @id @default(autoincrement())
+  name          String
+  specialty     String?
+  address       String
+  latitude      Float
+  longitude     Float
+  phone         String?
+  notes         String?
+  // Maximum number of visitors (medical reps) the office attends per day.
+  dailyCapacity Int      @default(1)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  officeHours OfficeHour[]
+  visits      Visit[]
+}
+
+// One row per day-of-week the doctor's office receives visitors.
+model OfficeHour {
+  id        Int    @id @default(autoincrement())
+  doctorId  Int
+  doctor    Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  // 0 = Sunday ... 6 = Saturday
+  dayOfWeek Int
+  // Stored as "HH:mm" 24h strings.
+  openTime  String
+  closeTime String
+
+  @@unique([doctorId, dayOfWeek])
+}
+
+model Visit {
+  id            Int      @id @default(autoincrement())
+  doctorId      Int
+  doctor        Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  date          DateTime
+  arrivalTime   String
+  departureTime String
+  durationMin   Int
+  notes         String?
+  createdAt     DateTime @default(now())
+}
