@@ -1,27 +1,65 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { GUATEMALA_DEPARTMENTS, GUATEMALA_CITY_ZONES, isCapitalCity } from "@/lib/guatemala-locations";
+import { hashPassword, createSession, getSessionUser } from "@/lib/auth";
+
+const USER_SAFE_SELECT = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  phone: true,
+  pharmaLab: true,
+  department: true,
+  municipality: true,
+  zone: true,
+  createdAt: true,
+} as const;
 
 export async function GET() {
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "desc" } });
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+  const users = await prisma.user.findMany({
+    orderBy: { createdAt: "desc" },
+    select: USER_SAFE_SELECT,
+  });
   return NextResponse.json(users);
 }
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { firstName, lastName, email, phone, pharmaLab, department, municipality, zone } = body as {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    pharmaLab: string;
-    department: string;
-    municipality: string;
-    zone?: number;
-  };
+  const { firstName, lastName, email, password, phone, pharmaLab, department, municipality, zone } =
+    body as {
+      firstName: string;
+      lastName: string;
+      email: string;
+      password: string;
+      phone: string;
+      pharmaLab: string;
+      department: string;
+      municipality: string;
+      zone?: number;
+    };
 
-  if (!firstName || !lastName || !email || !phone || !pharmaLab || !department || !municipality) {
+  if (
+    !firstName ||
+    !lastName ||
+    !email ||
+    !password ||
+    !phone ||
+    !pharmaLab ||
+    !department ||
+    !municipality
+  ) {
     return NextResponse.json({ error: "Todos los campos son obligatorios" }, { status: 400 });
+  }
+  if (password.length < 8) {
+    return NextResponse.json(
+      { error: "La contraseña debe tener al menos 8 caracteres" },
+      { status: 400 }
+    );
   }
 
   const municipalities = GUATEMALA_DEPARTMENTS[department];
@@ -47,6 +85,7 @@ export async function POST(request: Request) {
       firstName,
       lastName,
       email,
+      passwordHash: hashPassword(password),
       phone,
       pharmaLab,
       department,
@@ -55,5 +94,10 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json(user, { status: 201 });
+  await createSession(user.id);
+
+  return NextResponse.json(
+    { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email },
+    { status: 201 }
+  );
 }

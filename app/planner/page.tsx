@@ -1,11 +1,14 @@
 import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import PlannerForm from "@/components/PlannerForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlannerPage() {
+  const user = await requireUser();
+
   const doctors = await prisma.doctor.findMany({
-    where: { active: true },
+    where: { userId: user.id, active: true },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
@@ -20,7 +23,14 @@ export default async function PlannerPage() {
           tiempo promedio histórico por médico para estimar horarios de llegada y salida.
         </p>
       </div>
-      <PlannerForm doctors={doctors} />
+      <PlannerForm
+        doctors={doctors}
+        defaultHome={{
+          department: user.department,
+          municipality: user.municipality,
+          zone: user.zone,
+        }}
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DAYS_OF_WEEK } from "@/lib/constants";
+import SectorFields, { sectorNeedsZone, type SectorValue } from "@/components/SectorFields";
 import type { PlannerResult } from "@/lib/planner";
 
 type DoctorOption = { id: number; name: string };
@@ -17,9 +18,18 @@ function mondayOfCurrentWeek(): string {
 
 const DEFAULT_WORK_DAYS = [1, 2, 3, 4, 5];
 
-export default function PlannerForm({ doctors }: { doctors: DoctorOption[] }) {
-  const [homeLatitude, setHomeLatitude] = useState("");
-  const [homeLongitude, setHomeLongitude] = useState("");
+export default function PlannerForm({
+  doctors,
+  defaultHome,
+}: {
+  doctors: DoctorOption[];
+  defaultHome?: { department: string; municipality: string; zone: number | null };
+}) {
+  const [home, setHome] = useState<SectorValue>({
+    department: defaultHome?.department ?? "",
+    municipality: defaultHome?.municipality ?? "",
+    zone: defaultHome?.zone ? String(defaultHome.zone) : "",
+  });
   const [weekStartDate, setWeekStartDate] = useState(mondayOfCurrentWeek());
   const [workDays, setWorkDays] = useState<number[]>(DEFAULT_WORK_DAYS);
   const [dayStart, setDayStart] = useState("08:00");
@@ -43,10 +53,12 @@ export default function PlannerForm({ doctors }: { doctors: DoctorOption[] }) {
     setError(null);
     setResult(null);
 
-    const lat = Number(homeLatitude);
-    const lng = Number(homeLongitude);
-    if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      setError("Ingresa latitud y longitud válidas para tu punto de partida.");
+    if (!home.department || !home.municipality) {
+      setError("Selecciona el departamento y municipio de tu punto de partida.");
+      return;
+    }
+    if (sectorNeedsZone(home) && !home.zone) {
+      setError("Selecciona la zona de tu punto de partida en la Ciudad de Guatemala.");
       return;
     }
     if (selectedDoctorIds.length === 0) {
@@ -60,8 +72,9 @@ export default function PlannerForm({ doctors }: { doctors: DoctorOption[] }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          homeLatitude: lat,
-          homeLongitude: lng,
+          homeDepartment: home.department,
+          homeMunicipality: home.municipality,
+          homeZone: home.zone ? Number(home.zone) : undefined,
           weekStartDate,
           workDays,
           dayStart,
@@ -91,27 +104,9 @@ export default function PlannerForm({ doctors }: { doctors: DoctorOption[] }) {
           </p>
         )}
 
+        <SectorFields value={home} onChange={setHome} legend="Tu punto de partida" />
+
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-sm">
-            Latitud de tu punto de partida *
-            <input
-              className="border rounded px-2 py-1"
-              value={homeLatitude}
-              onChange={(e) => setHomeLatitude(e.target.value)}
-              placeholder="14.6349"
-              required
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Longitud de tu punto de partida *
-            <input
-              className="border rounded px-2 py-1"
-              value={homeLongitude}
-              onChange={(e) => setHomeLongitude(e.target.value)}
-              placeholder="-90.5069"
-              required
-            />
-          </label>
           <label className="flex flex-col gap-1 text-sm">
             Semana (lunes de inicio)
             <input

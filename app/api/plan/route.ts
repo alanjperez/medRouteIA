@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { buildWeeklyPlan, type PlannerDoctor } from "@/lib/planner";
+import { GUATEMALA_DEPARTMENTS, GUATEMALA_CITY_ZONES, isCapitalCity } from "@/lib/guatemala-locations";
 
 const DEFAULT_WORK_DAYS = [1, 2, 3, 4, 5];
 const DEFAULT_VISIT_MINUTES = 20;
 
 export async function POST(request: NextRequest) {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
   const body = await request.json();
   const {
-    homeLatitude,
-    homeLongitude,
+    homeDepartment,
+    homeMunicipality,
+    homeZone,
     weekStartDate,
     doctorIds,
     workDays,
@@ -17,8 +25,9 @@ export async function POST(request: NextRequest) {
     dayEnd,
     defaultVisitMinutes,
   } = body as {
-    homeLatitude: number;
-    homeLongitude: number;
+    homeDepartment: string;
+    homeMunicipality: string;
+    homeZone?: number;
     weekStartDate: string;
     doctorIds?: number[];
     workDays?: number[];
@@ -27,15 +36,28 @@ export async function POST(request: NextRequest) {
     defaultVisitMinutes?: number;
   };
 
-  if (homeLatitude === undefined || homeLongitude === undefined || !weekStartDate) {
+  if (!homeDepartment || !homeMunicipality || !weekStartDate) {
     return NextResponse.json(
-      { error: "homeLatitude, homeLongitude y weekStartDate son obligatorios" },
+      { error: "homeDepartment, homeMunicipality y weekStartDate son obligatorios" },
+      { status: 400 }
+    );
+  }
+
+  const homeMunicipalities = GUATEMALA_DEPARTMENTS[homeDepartment];
+  if (!homeMunicipalities || !homeMunicipalities.includes(homeMunicipality)) {
+    return NextResponse.json({ error: "Departamento o municipio de partida inválido" }, { status: 400 });
+  }
+  const homeIsCapital = isCapitalCity(homeDepartment, homeMunicipality);
+  if (homeIsCapital && (homeZone === undefined || !GUATEMALA_CITY_ZONES.includes(homeZone))) {
+    return NextResponse.json(
+      { error: "Selecciona una zona válida de partida en la Ciudad de Guatemala" },
       { status: 400 }
     );
   }
 
   const doctors = await prisma.doctor.findMany({
     where: {
+      userId: sessionUser.id,
       active: true,
       ...(doctorIds && doctorIds.length ? { id: { in: doctorIds } } : {}),
     },
@@ -53,8 +75,9 @@ export async function POST(request: NextRequest) {
         id: doctor.id,
         name: doctor.name,
         address: doctor.address,
-        latitude: doctor.latitude,
-        longitude: doctor.longitude,
+        department: doctor.department,
+        municipality: doctor.municipality,
+        zone: doctor.zone,
         dailyCapacity: doctor.dailyCapacity,
         officeHours: doctor.officeHours.map((oh) => ({
           dayOfWeek: oh.dayOfWeek,
@@ -69,7 +92,11 @@ export async function POST(request: NextRequest) {
 
   const result = buildWeeklyPlan({
     doctors: plannerDoctors,
-    home: { latitude: homeLatitude, longitude: homeLongitude },
+    home: {
+      department: homeDepartment,
+      municipality: homeMunicipality,
+      zone: homeIsCapital ? homeZone : null,
+    },
     weekStartDate,
     workDays: workDays ?? DEFAULT_WORK_DAYS,
     dayStart: dayStart ?? "08:00",

@@ -1,52 +1,48 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GUATEMALA_DEPARTMENTS, GUATEMALA_CITY_ZONES, isCapitalCity } from "@/lib/guatemala-locations";
-
-const DEPARTMENTS = Object.keys(GUATEMALA_DEPARTMENTS).sort((a, b) => a.localeCompare(b, "es"));
+import SectorFields, { EMPTY_SECTOR, sectorNeedsZone, type SectorValue } from "@/components/SectorFields";
 
 export default function UserForm() {
   const router = useRouter();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [pharmaLab, setPharmaLab] = useState("");
-  const [department, setDepartment] = useState("");
-  const [municipality, setMunicipality] = useState("");
-  const [zone, setZone] = useState("");
+  const [sector, setSector] = useState<SectorValue>(EMPTY_SECTOR);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-
-  const municipalities = useMemo(
-    () => (department ? [...GUATEMALA_DEPARTMENTS[department]].sort((a, b) => a.localeCompare(b, "es")) : []),
-    [department]
-  );
-  const needsZone = isCapitalCity(department, municipality);
-
-  function handleDepartmentChange(value: string) {
-    setDepartment(value);
-    setMunicipality("");
-    setZone("");
-  }
-
-  function handleMunicipalityChange(value: string) {
-    setMunicipality(value);
-    setZone("");
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setSuccess(false);
 
-    if (!firstName || !lastName || !email || !phone || !pharmaLab || !department || !municipality) {
+    if (
+      !firstName ||
+      !lastName ||
+      !email ||
+      !password ||
+      !phone ||
+      !pharmaLab ||
+      !sector.department ||
+      !sector.municipality
+    ) {
       setError("Todos los campos son obligatorios.");
       return;
     }
-    if (needsZone && !zone) {
+    if (password.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
+    if (sectorNeedsZone(sector) && !sector.zone) {
       setError("Selecciona la zona de la Ciudad de Guatemala.");
       return;
     }
@@ -60,30 +56,22 @@ export default function UserForm() {
           firstName,
           lastName,
           email,
+          password,
           phone,
           pharmaLab,
-          department,
-          municipality,
-          zone: needsZone ? Number(zone) : undefined,
+          department: sector.department,
+          municipality: sector.municipality,
+          zone: sector.zone ? Number(sector.zone) : undefined,
         }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? "No se pudo crear el usuario");
       }
-      setFirstName("");
-      setLastName("");
-      setEmail("");
-      setPhone("");
-      setPharmaLab("");
-      setDepartment("");
-      setMunicipality("");
-      setZone("");
-      setSuccess(true);
+      router.replace("/");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado");
-    } finally {
       setSubmitting(false);
     }
   }
@@ -98,12 +86,6 @@ export default function UserForm() {
           {error}
         </p>
       )}
-      {success && (
-        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
-          Usuario creado correctamente.
-        </p>
-      )}
-
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
           Nombre *
@@ -151,64 +133,31 @@ export default function UserForm() {
             required
           />
         </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Contraseña *
+          <input
+            type="password"
+            className="border rounded px-2 py-1"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            minLength={8}
+            required
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Confirmar contraseña *
+          <input
+            type="password"
+            className="border rounded px-2 py-1"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            minLength={8}
+            required
+          />
+        </label>
       </div>
 
-      <div>
-        <h3 className="text-sm font-medium mb-2">Sector *</h3>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <label className="flex flex-col gap-1 text-sm">
-            Departamento
-            <select
-              className="border rounded px-2 py-1"
-              value={department}
-              onChange={(e) => handleDepartmentChange(e.target.value)}
-              required
-            >
-              <option value="">Selecciona...</option>
-              {DEPARTMENTS.map((dep) => (
-                <option key={dep} value={dep}>
-                  {dep}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Municipio
-            <select
-              className="border rounded px-2 py-1 disabled:bg-slate-100"
-              value={municipality}
-              onChange={(e) => handleMunicipalityChange(e.target.value)}
-              disabled={!department}
-              required
-            >
-              <option value="">Selecciona...</option>
-              {municipalities.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </label>
-          {needsZone && (
-            <label className="flex flex-col gap-1 text-sm">
-              Zona (Ciudad de Guatemala)
-              <select
-                className="border rounded px-2 py-1"
-                value={zone}
-                onChange={(e) => setZone(e.target.value)}
-                required
-              >
-                <option value="">Selecciona...</option>
-                {GUATEMALA_CITY_ZONES.map((z) => (
-                  <option key={z} value={z}>
-                    Zona {z}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-      </div>
+      <SectorFields value={sector} onChange={setSector} />
 
       <button
         type="submit"

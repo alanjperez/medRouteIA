@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DAYS_OF_WEEK } from "@/lib/constants";
+import SectorFields, { EMPTY_SECTOR, sectorNeedsZone, type SectorValue } from "@/components/SectorFields";
 
 type OfficeHourRow = {
   enabled: boolean;
@@ -21,8 +22,7 @@ export default function DoctorForm() {
   const [name, setName] = useState("");
   const [specialty, setSpecialty] = useState("");
   const [address, setAddress] = useState("");
-  const [latitude, setLatitude] = useState("");
-  const [longitude, setLongitude] = useState("");
+  const [sector, setSector] = useState<SectorValue>(EMPTY_SECTOR);
   const [phone, setPhone] = useState("");
   const [dailyCapacity, setDailyCapacity] = useState("1");
   const [notes, setNotes] = useState("");
@@ -39,10 +39,12 @@ export default function DoctorForm() {
     e.preventDefault();
     setError(null);
 
-    const lat = Number(latitude);
-    const lng = Number(longitude);
-    if (!name || !address || Number.isNaN(lat) || Number.isNaN(lng)) {
-      setError("Nombre, dirección y coordenadas (latitud/longitud) son obligatorios.");
+    if (!name || !address || !sector.department || !sector.municipality) {
+      setError("Nombre, dirección y sector son obligatorios.");
+      return;
+    }
+    if (sectorNeedsZone(sector) && !sector.zone) {
+      setError("Selecciona la zona de la Ciudad de Guatemala.");
       return;
     }
 
@@ -66,8 +68,9 @@ export default function DoctorForm() {
           name,
           specialty: specialty || undefined,
           address,
-          latitude: lat,
-          longitude: lng,
+          department: sector.department,
+          municipality: sector.municipality,
+          zone: sector.zone ? Number(sector.zone) : undefined,
           phone: phone || undefined,
           notes: notes || undefined,
           dailyCapacity: Number(dailyCapacity) || 1,
@@ -81,8 +84,7 @@ export default function DoctorForm() {
       setName("");
       setSpecialty("");
       setAddress("");
-      setLatitude("");
-      setLongitude("");
+      setSector(EMPTY_SECTOR);
       setPhone("");
       setDailyCapacity("1");
       setNotes("");
@@ -153,26 +155,7 @@ export default function DoctorForm() {
             className="border rounded px-2 py-1"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            required
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Latitud *
-          <input
-            className="border rounded px-2 py-1"
-            value={latitude}
-            onChange={(e) => setLatitude(e.target.value)}
-            placeholder="14.6349"
-            required
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Longitud *
-          <input
-            className="border rounded px-2 py-1"
-            value={longitude}
-            onChange={(e) => setLongitude(e.target.value)}
-            placeholder="-90.5069"
+            placeholder="6a Avenida 10-25, Zona 10"
             required
           />
         </label>
@@ -204,10 +187,7 @@ export default function DoctorForm() {
         </label>
       </div>
 
-      <p className="text-xs text-slate-500">
-        Puedes obtener la latitud y longitud desde Google Maps: clic derecho sobre la
-        ubicación y copiar las coordenadas.
-      </p>
+      <SectorFields value={sector} onChange={setSector} />
 
       <div>
         <h3 className="text-sm font-medium mb-2">Días y horario de atención *</h3>

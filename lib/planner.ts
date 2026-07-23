@@ -1,4 +1,4 @@
-import { haversineDistanceKm, estimateTravelMinutes, type LatLng } from "@/lib/geo";
+import { estimateTravelMinutes, type Sector } from "@/lib/geo";
 import { parseHM, formatHM, dateForWeekday } from "@/lib/time";
 
 export type PlannerOfficeHour = {
@@ -7,7 +7,7 @@ export type PlannerOfficeHour = {
   closeTime: string;
 };
 
-export type PlannerDoctor = LatLng & {
+export type PlannerDoctor = Sector & {
   id: number;
   name: string;
   address: string;
@@ -19,7 +19,7 @@ export type PlannerDoctor = LatLng & {
 
 export type PlannerInput = {
   doctors: PlannerDoctor[];
-  home: LatLng;
+  home: Sector;
   weekStartDate: string; // ISO date, must fall on a Monday
   workDays: number[]; // 0=Sun..6=Sat
   dayStart: string; // "HH:mm"
@@ -100,10 +100,10 @@ export function buildWeeklyPlan(input: PlannerInput): PlannerResult {
     for (const day of eligibleDays) {
       const bucket = dayBuckets.get(day)!;
       const loadMinutes = bucket.reduce((s, d) => s + d.avgVisitMinutes, 0);
-      const avgDistanceKm = bucket.length
-        ? bucket.reduce((s, d) => s + haversineDistanceKm(d, doctor), 0) / bucket.length
+      const avgTravelMin = bucket.length
+        ? bucket.reduce((s, d) => s + estimateTravelMinutes(d, doctor), 0) / bucket.length
         : 0;
-      const score = loadMinutes + avgDistanceKm * 2;
+      const score = loadMinutes + avgTravelMin;
       if (score < bestScore) {
         bestScore = score;
         bestDay = day;
@@ -128,17 +128,17 @@ export function buildWeeklyPlan(input: PlannerInput): PlannerResult {
       };
     }
 
-    let current: LatLng = home;
+    let current: Sector = home;
     let clock = parseHM(dayStart);
     const stops: PlannerStop[] = [];
 
     while (bucket.length > 0) {
       let nearestIdx = 0;
-      let nearestDist = Infinity;
+      let nearestMin = Infinity;
       bucket.forEach((doc, idx) => {
-        const dist = haversineDistanceKm(current, doc);
-        if (dist < nearestDist) {
-          nearestDist = dist;
+        const min = estimateTravelMinutes(current, doc);
+        if (min < nearestMin) {
+          nearestMin = min;
           nearestIdx = idx;
         }
       });

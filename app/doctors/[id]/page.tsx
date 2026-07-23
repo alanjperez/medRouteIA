@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { dayNameEs } from "@/lib/time";
+import { requireUser } from "@/lib/auth";
 import VisitForm from "@/components/VisitForm";
 import DeleteDoctorButton from "@/components/DeleteDoctorButton";
 
@@ -11,6 +12,7 @@ export default async function DoctorDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const user = await requireUser();
   const { id } = await params;
   const doctorId = Number(id);
 
@@ -22,7 +24,7 @@ export default async function DoctorDetailPage({
     },
   });
 
-  if (!doctor) notFound();
+  if (!doctor || doctor.userId !== user.id) notFound();
 
   const aggregate = await prisma.visit.aggregate({
     where: { doctorId },
@@ -39,6 +41,10 @@ export default async function DoctorDetailPage({
           <h1 className="text-2xl font-semibold">{doctor.name}</h1>
           {doctor.specialty && <p className="text-slate-600">{doctor.specialty}</p>}
           <p className="text-slate-600 mt-1">{doctor.address}</p>
+          <p className="text-slate-600">
+            {doctor.municipality}, {doctor.department}
+            {doctor.zone ? ` (Zona ${doctor.zone})` : ""}
+          </p>
           {doctor.phone && <p className="text-slate-600">{doctor.phone}</p>}
         </div>
         <DeleteDoctorButton doctorId={doctor.id} />

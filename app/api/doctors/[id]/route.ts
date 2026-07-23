@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
+import { validateSector, isCapitalCity } from "@/lib/guatemala-locations";
 
 export async function GET(_req: NextRequest, ctx: RouteContext<"/api/doctors/[id]">) {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
   const { id } = await ctx.params;
   const doctor = await prisma.doctor.findUnique({
     where: { id: Number(id) },
@@ -10,29 +15,59 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/api/doctors/[id
       visits: { orderBy: { date: "desc" } },
     },
   });
-  if (!doctor) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  if (!doctor || doctor.userId !== sessionUser.id) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  }
   return NextResponse.json(doctor);
 }
 
 type OfficeHourInput = { dayOfWeek: number; openTime: string; closeTime: string };
 
 export async function PUT(request: NextRequest, ctx: RouteContext<"/api/doctors/[id]">) {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
   const { id } = await ctx.params;
   const doctorId = Number(id);
+
+  const existing = await prisma.doctor.findUnique({ where: { id: doctorId } });
+  if (!existing || existing.userId !== sessionUser.id) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  }
+
   const body = await request.json();
-  const { name, specialty, address, latitude, longitude, phone, notes, dailyCapacity, active, officeHours } =
-    body as {
-      name: string;
-      specialty?: string;
-      address: string;
-      latitude: number;
-      longitude: number;
-      phone?: string;
-      notes?: string;
-      dailyCapacity?: number;
-      active?: boolean;
-      officeHours?: OfficeHourInput[];
-    };
+  const {
+    name,
+    specialty,
+    address,
+    department,
+    municipality,
+    zone,
+    phone,
+    notes,
+    dailyCapacity,
+    active,
+    officeHours,
+  } = body as {
+    name: string;
+    specialty?: string;
+    address: string;
+    department: string;
+    municipality: string;
+    zone?: number;
+    phone?: string;
+    notes?: string;
+    dailyCapacity?: number;
+    active?: boolean;
+    officeHours?: OfficeHourInput[];
+  };
+
+  if (department && municipality) {
+    const sectorError = validateSector(department, municipality, zone);
+    if (sectorError) {
+      return NextResponse.json({ error: sectorError }, { status: 400 });
+    }
+  }
 
   const doctor = await prisma.$transaction(async (tx) => {
     if (officeHours) {
@@ -44,8 +79,9 @@ export async function PUT(request: NextRequest, ctx: RouteContext<"/api/doctors/
         name,
         specialty,
         address,
-        latitude,
-        longitude,
+        department,
+        municipality,
+        zone: department && municipality ? (isCapitalCity(department, municipality) ? zone : null) : undefined,
         phone,
         notes,
         dailyCapacity,
@@ -70,7 +106,17 @@ export async function PUT(request: NextRequest, ctx: RouteContext<"/api/doctors/
 }
 
 export async function DELETE(_req: NextRequest, ctx: RouteContext<"/api/doctors/[id]">) {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
   const { id } = await ctx.params;
-  await prisma.doctor.delete({ where: { id: Number(id) } });
+  const doctorId = Number(id);
+
+  const existing = await prisma.doctor.findUnique({ where: { id: doctorId } });
+  if (!existing || existing.userId !== sessionUser.id) {
+    return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  }
+
+  await prisma.doctor.delete({ where: { id: doctorId } });
   return NextResponse.json({ ok: true });
 }

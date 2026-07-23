@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { parseHM } from "@/lib/time";
 
 export async function GET(request: NextRequest) {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
   const doctorId = request.nextUrl.searchParams.get("doctorId");
   const visits = await prisma.visit.findMany({
-    where: doctorId ? { doctorId: Number(doctorId) } : undefined,
+    where: {
+      doctor: { userId: sessionUser.id },
+      ...(doctorId ? { doctorId: Number(doctorId) } : {}),
+    },
     include: { doctor: { select: { id: true, name: true } } },
     orderBy: { date: "desc" },
   });
@@ -13,6 +20,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
   const body = await request.json();
   const { doctorId, date, arrivalTime, departureTime, notes } = body as {
     doctorId: number;
@@ -27,6 +37,11 @@ export async function POST(request: NextRequest) {
       { error: "doctorId, date, arrivalTime y departureTime son obligatorios" },
       { status: 400 }
     );
+  }
+
+  const doctor = await prisma.doctor.findUnique({ where: { id: doctorId } });
+  if (!doctor || doctor.userId !== sessionUser.id) {
+    return NextResponse.json({ error: "Médico no encontrado" }, { status: 404 });
   }
 
   const durationMin = parseHM(departureTime) - parseHM(arrivalTime);

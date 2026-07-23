@@ -394,3 +394,22 @@ export const CAPITAL_MUNICIPALITY = "Guatemala";
 export function isCapitalCity(department: string, municipality: string): boolean {
   return department === CAPITAL_DEPARTMENT && municipality === CAPITAL_MUNICIPALITY;
 }
+
+// Validates a department/municipality/zone triple against the catalog.
+// Returns an error message, or null when the sector is valid.
+export function validateSector(
+  department: string,
+  municipality: string,
+  zone?: number | null
+): string | null {
+  const municipalities = GUATEMALA_DEPARTMENTS[department];
+  if (!municipalities || !municipalities.includes(municipality)) {
+    return "Departamento o municipio inválido";
+  }
+  if (isCapitalCity(department, municipality)) {
+    if (zone == null || !GUATEMALA_CITY_ZONES.includes(zone)) {
+      return "Selecciona una zona válida de la Ciudad de Guatemala";
+    }
+  }
+  return null;
+}

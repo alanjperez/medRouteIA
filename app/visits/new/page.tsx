@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import VisitForm from "@/components/VisitForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewVisitPage() {
+  const user = await requireUser();
+
   const doctors = await prisma.doctor.findMany({
-    where: { active: true },
+    where: { userId: user.id, active: true },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
