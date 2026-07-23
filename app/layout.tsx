@@ -23,6 +23,7 @@ const NAV_LINKS = [
   { href: "/doctors", label: "Médicos" },
   { href: "/visits/new", label: "Registrar visita" },
   { href: "/planner", label: "Planificador semanal" },
+  { href: "/usuarios/nuevo", label: "Nuevo usuario" },
 ];
 
 export default function RootLayout({
